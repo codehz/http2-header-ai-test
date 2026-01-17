@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -409,9 +410,17 @@ Http2Client::Response Http2Client::receiveResponse(uint32_t stream_id) {
             case FRAME_TYPE_HEADERS: {
                 if (recv_stream_id == stream_id) {
                     std::cout << "Received HEADERS frame for stream " << stream_id << std::endl;
+                    std::cout << "  Payload size: " << payload.size() << " bytes" << std::endl;
+                    std::cout << "  Payload hex: ";
+                    for (size_t i = 0; i < std::min(size_t(50), payload.size()); ++i) {
+                        printf("%02x ", payload[i]);
+                    }
+                    std::cout << (payload.size() > 50 ? "..." : "") << std::endl;
+                    
                     header_block.insert(header_block.end(), payload.begin(), payload.end());
                     if (flags & FLAG_END_HEADERS) {
-                        std::cout << "Headers complete, attempting to decode..." << std::endl;
+                        std::cout << "Headers complete (END_HEADERS flag set), attempting to decode..." << std::endl;
+                        std::cout << "  Total header block size: " << header_block.size() << " bytes" << std::endl;
                         // 尝试解码头部
                         try {
                             auto decoded = HPACK::decode(header_block);
@@ -431,6 +440,13 @@ Http2Client::Response Http2Client::receiveResponse(uint32_t stream_id) {
                             }
                         } catch (const std::exception& e) {
                             std::cerr << "Error decoding headers: " << e.what() << std::endl;
+                            std::cerr << "Header block details:" << std::endl;
+                            std::cerr << "  Size: " << header_block.size() << " bytes" << std::endl;
+                            std::cerr << "  Hex: ";
+                            for (size_t i = 0; i < header_block.size(); ++i) {
+                                fprintf(stderr, "%02x ", header_block[i]);
+                            }
+                            std::cerr << std::endl;
                             // 继续处理，尽管headers无法解码
                             std::cout << "Continuing without decoded headers..." << std::endl;
                         }

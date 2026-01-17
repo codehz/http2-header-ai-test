@@ -54,23 +54,27 @@ TEST_F(HeaderParserTest, ValidateHeaders) {
  * Test parsing header block
  */
 TEST_F(HeaderParserTest, ParseHeaderBlock) {
-    // Create a simple header block with name-value pairs
-    // Format: [string_length][string_data][string_length][string_data]
-    // Example: "content-type" + "application/json"
+    // Create a header block using proper HPACK format
+    // Literal Header Field without Indexing (0000 0000) + Name + Value
     
-    // Build header data: "content-type" (12 bytes) + "application/json" (16 bytes)
-    uint8_t buffer[] = {
-        // First string length (with Huffman bit = 0)
-        0x0C,  // 12 bytes for "content-type"
-        'c', 'o', 'n', 't', 'e', 'n', 't', '-', 't', 'y', 'p', 'e',
-        // Second string length (with Huffman bit = 0)
-        0x10,  // 16 bytes for "application/json"
-        'a', 'p', 'p', 'l', 'i', 'c', 'a', 't', 'i', 'o', 'n', '/', 'j', 's', 'o', 'n'
-    };
-    size_t length = sizeof(buffer);
+    // Build header using HPACK format
+    std::vector<uint8_t> buffer;
+    
+    // Literal without indexing flag (0x00)
+    buffer.push_back(0x00);
+    
+    // Name: "content-type" (12 bytes)
+    // RFC 7541 string encoding: [H bit + length bits]...[data]
+    // H=0 (not Huffman), length=12 < 127, so just one byte for length
+    buffer.push_back(0x0C);  // 12 bytes
+    buffer.insert(buffer.end(), {'c', 'o', 'n', 't', 'e', 'n', 't', '-', 't', 'y', 'p', 'e'});
+    
+    // Value: "application/json" (16 bytes)
+    buffer.push_back(0x10);  // 16 bytes
+    buffer.insert(buffer.end(), {'a', 'p', 'p', 'l', 'i', 'c', 'a', 't', 'i', 'o', 'n', '/', 'j', 's', 'o', 'n'});
 
     std::vector<std::pair<std::string, std::string>> headers = 
-        HeaderParser::parseHeaders(buffer, length);
+        HeaderParser::parseHeaders(buffer.data(), buffer.size());
     
     // With proper HPACK decoding, this should return at least one header
     EXPECT_FALSE(headers.empty());

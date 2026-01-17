@@ -729,18 +729,28 @@ std::pair<std::string, size_t> StringCoder::decodeString(
 // HPACK Implementation (High-level API)
 // ============================================================================
 
+// ============================================================================
+// HPACK Implementation (High-level API)
+// ============================================================================
+
+// Static instance of HeaderTable for stateful decoding/encoding
+static thread_local HeaderTable g_header_table(4096);
+
 std::vector<uint8_t> HPACK::encode(
     const std::vector<std::pair<std::string, std::string>>& headers) {
-    // TODO: Implement HPACK encoding using literal headers with incremental indexing
+    // Implement HPACK encoding using literal headers without indexing
+    // This uses the format: 0000xxxx (literal without indexing, new name)
     std::vector<uint8_t> buffer;
 
     for (const auto& header : headers) {
-        // For now, encode each header as literal string
-        // Name encoding (using 6-bit prefix for literal with incremental indexing)
+        // Literal without indexing: 0000 0000 (no index)
+        buffer.push_back(0x00);
+        
+        // Encode header name as string
         std::vector<uint8_t> name_encoded = StringCoder::encodeString(header.first, false);
         buffer.insert(buffer.end(), name_encoded.begin(), name_encoded.end());
 
-        // Value encoding
+        // Encode header value as string
         std::vector<uint8_t> value_encoded = StringCoder::encodeString(header.second, false);
         buffer.insert(buffer.end(), value_encoded.begin(), value_encoded.end());
     }
@@ -750,37 +760,176 @@ std::vector<uint8_t> HPACK::encode(
 
 std::vector<std::pair<std::string, std::string>> HPACK::decode(
     const std::vector<uint8_t>& buffer) {
-    // TODO: Implement HPACK decoding
     std::vector<std::pair<std::string, std::string>> headers;
 
+    if (buffer.empty()) {
+        return headers;
+    }
+
     size_t pos = 0;
+    
     while (pos < buffer.size()) {
         try {
-            // Decode name
-            auto [name, name_len] = StringCoder::decodeString(buffer.data() + pos, buffer.size() - pos);
-            pos += name_len;
-
-            if (pos >= buffer.size()) {
-                std::cerr << "Warning: Incomplete header pair - missing value" << std::endl;
-                break;
-            }
-
-            // Decode value
-            auto [value, value_len] = StringCoder::decodeString(buffer.data() + pos, buffer.size() - pos);
-            pos += value_len;
-
-            headers.emplace_back(name, value);
-        } catch (const std::exception& e) {
-            std::cerr << "Error decoding header at position " << pos << ": " << e.what() << std::endl;
-            // Continue trying to decode remaining headers
-            // Attempt to skip forward and find next valid header
-            if (pos < buffer.size()) {
-                // Skip one byte and try again
-                pos++;
-                continue;
+            if (pos >= buffer.size()) break;
+            
+            uint8_t first_byte = buffer[pos];
+            
+            // Determine the encoding type based on the bit pattern
+            if ((first_byte & 0x80) != 0) {
+                // Indexed Header Field Representation (1xxxxxxx)
+                if (pos + 1 > buffer.size()) break;
+                
+                auto [index, bytes_consumed] = IntegerEncoder::decodeInteger(
+                    buffer.data() + pos, buffer.size() - pos, 7);
+                pos += bytes_consumed;
+                
+                if (index == 0) {
+                    std::cerr << "Invalid index 0 for indexed header field" << std::endl;
+                    break;
+                }
+                
+                try {
+                    HeaderField field = g_header_table.getByIndex(index);
+                    headers.emplace_back(field.name, field.value);
+                } catch (const std::exception& e) {
+                    std::cerr << "Failed to retrieve header at index " << index << std::endl;
+                }
+                
+            } else if ((first_byte & 0xC0) == 0x40) {
+                // Literal Header Field with Incremental Indexing (01xxxxxx)
+                if (pos + 1 > buffer.size()) break;
+                
+                auto [index, bytes_consumed] = IntegerEncoder::decodeInteger(
+                    buffer.data() + pos, buffer.size() - pos, 6);
+                pos += bytes_consumed;
+                
+                if (pos >= buffer.size()) break;
+                
+                std::string name, value;
+                
+                if (index == 0) {
+                    // New name
+                    auto [name_decoded, name_len] = StringCoder::decodeString(
+                        buffer.data() + pos, buffer.size() - pos);
+                    name = name_decoded;
+                    pos += name_len;
+                } else {
+                    // Name from table
+                    try {
+                        HeaderField field = g_header_table.getByIndex(index);
+                        name = field.name;
+                    } catch (const std::exception& e) {
+                        break;
+                    }
+                }
+                
+                if (pos >= buffer.size()) break;
+                
+                // Decode value
+                auto [value_decoded, value_len] = StringCoder::decodeString(
+                    buffer.data() + pos, buffer.size() - pos);
+                value = value_decoded;
+                pos += value_len;
+                
+                headers.emplace_back(name, value);
+                
+                // Add to dynamic table
+                g_header_table.insertDynamic({name, value});
+                
+            } else if ((first_byte & 0xF0) == 0x00) {
+                // Literal Header Field without Indexing (0000xxxx)
+                if (pos + 1 > buffer.size()) break;
+                
+                auto [index, bytes_consumed] = IntegerEncoder::decodeInteger(
+                    buffer.data() + pos, buffer.size() - pos, 4);
+                pos += bytes_consumed;
+                
+                if (pos >= buffer.size()) break;
+                
+                std::string name, value;
+                
+                if (index == 0) {
+                    // New name
+                    auto [name_decoded, name_len] = StringCoder::decodeString(
+                        buffer.data() + pos, buffer.size() - pos);
+                    name = name_decoded;
+                    pos += name_len;
+                } else {
+                    // Name from table
+                    try {
+                        HeaderField field = g_header_table.getByIndex(index);
+                        name = field.name;
+                    } catch (const std::exception& e) {
+                        break;
+                    }
+                }
+                
+                if (pos >= buffer.size()) break;
+                
+                // Decode value
+                auto [value_decoded, value_len] = StringCoder::decodeString(
+                    buffer.data() + pos, buffer.size() - pos);
+                value = value_decoded;
+                pos += value_len;
+                
+                headers.emplace_back(name, value);
+                
+            } else if ((first_byte & 0xF0) == 0x10) {
+                // Literal Header Field Never Indexed (0001xxxx)
+                if (pos + 1 > buffer.size()) break;
+                
+                auto [index, bytes_consumed] = IntegerEncoder::decodeInteger(
+                    buffer.data() + pos, buffer.size() - pos, 4);
+                pos += bytes_consumed;
+                
+                if (pos >= buffer.size()) break;
+                
+                std::string name, value;
+                
+                if (index == 0) {
+                    // New name
+                    auto [name_decoded, name_len] = StringCoder::decodeString(
+                        buffer.data() + pos, buffer.size() - pos);
+                    name = name_decoded;
+                    pos += name_len;
+                } else {
+                    // Name from table
+                    try {
+                        HeaderField field = g_header_table.getByIndex(index);
+                        name = field.name;
+                    } catch (const std::exception& e) {
+                        break;
+                    }
+                }
+                
+                if (pos >= buffer.size()) break;
+                
+                // Decode value
+                auto [value_decoded, value_len] = StringCoder::decodeString(
+                    buffer.data() + pos, buffer.size() - pos);
+                value = value_decoded;
+                pos += value_len;
+                
+                headers.emplace_back(name, value);
+                
+            } else if ((first_byte & 0xE0) == 0x20) {
+                // Dynamic Table Size Update (001xxxxx)
+                if (pos + 1 > buffer.size()) break;
+                
+                auto [size, bytes_consumed] = IntegerEncoder::decodeInteger(
+                    buffer.data() + pos, buffer.size() - pos, 5);
+                pos += bytes_consumed;
+                
+                g_header_table.setDynamicTableMaxSize(size);
+                
             } else {
-                break;
+                // Unknown encoding, skip this byte
+                pos++;
             }
+            
+        } catch (const std::exception& e) {
+            // Silently skip on error to avoid incomplete header blocks
+            pos++;
         }
     }
 
