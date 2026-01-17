@@ -28,6 +28,7 @@ find_package(GTest CONFIG REQUIRED)
 set(TEST_SOURCES
     test/test_hpack.cpp
     test/test_header_parser.cpp
+    test/test_e2e_http2_headers.cpp
 )
 
 # Create test executable
