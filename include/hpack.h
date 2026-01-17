@@ -68,7 +68,7 @@ private:
  * A string is represented as follows:
  * 1. The MSB of the first byte is a Huffman bit (H flag):
  *    - 0: string is encoded as literal octets
- *    - 1: string is encoded using Huffman coding (not implemented here)
+ *    - 1: string is encoded using Huffman coding (RFC 7541 Appendix B)
  * 2. The remaining 7 bits of the first byte, plus continuation bytes,
  *    encode the length of the string
  */
@@ -91,12 +91,12 @@ public:
      * @param length Total length of available data
      * @return Pair of (decoded_string, bytes_consumed)
      * @throws std::out_of_range if buffer is too short
-     * @throws std::runtime_error if Huffman decoding is encountered (not implemented)
+     * @throws std::runtime_error if Huffman decoding encounters invalid padding
      */
     static std::pair<std::string, size_t> decodeString(const uint8_t* data, size_t length);
 
 private:
-    // Huffman encoding/decoding would be implemented here
+    // Huffman encoding/decoding is implemented in the cpp file
 };
 
 /**

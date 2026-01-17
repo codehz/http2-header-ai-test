@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2")
 
+# Find OpenSSL
+find_package(OpenSSL REQUIRED)
+
 # Include directories
 include_directories(include)
 
@@ -17,6 +20,9 @@ set(HTTP2_PARSER_SOURCES
 
 # Create library target
 add_library(http2-parser ${HTTP2_PARSER_SOURCES})
+
+# Link OpenSSL to the library
+target_link_libraries(http2-parser PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 
 # Enable testing
 enable_testing()
@@ -39,3 +45,7 @@ target_link_libraries(http2-test-runner PRIVATE http2-parser GTest::gtest GTest:
 
 # Register tests
 add_test(NAME http2-tests COMMAND http2-test-runner)
+
+# HTTP/2 Client executable (test program)
+add_executable(http2-client src/main.cpp src/http2_client.cpp)
+target_link_libraries(http2-client PRIVATE http2-parser OpenSSL::SSL OpenSSL::Crypto)

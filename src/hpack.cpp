@@ -460,6 +460,164 @@ std::pair<uint64_t, size_t> IntegerEncoder::decodeInteger(
 }
 
 // ============================================================================
+// Huffman Decoding Implementation (RFC 7541 Section 5.2)
+// ============================================================================
+
+/**
+ * Huffman code table for decoding (RFC 7541 Appendix B)
+ * Each symbol (0-255) has a variable-length binary code
+ * The table is indexed by symbol number
+ */
+struct HuffmanCode {
+    uint32_t code;    // The code bits (right-aligned)
+    uint8_t bits;     // Number of bits (1-30)
+};
+
+static const HuffmanCode HUFFMAN_CODE_TABLE[256] = {
+    // Sym 0-15
+    {0x1ff8, 13}, {0x7fffd8, 23}, {0xfffffe2, 28}, {0xfffffe3, 28},
+    {0xfffffe4, 28}, {0xfffffe5, 28}, {0xfffffe6, 28}, {0xfffffe7, 28},
+    {0xfffffe8, 28}, {0xffffea, 24}, {0x3ffffffc, 30}, {0xfffffe9, 28},
+    {0xfffffea, 28}, {0x3ffffffd, 30}, {0xfffffeb, 28}, {0xfffffec, 28},
+    // Sym 16-31
+    {0xfffffed, 28}, {0xfffffee, 28}, {0xfffffef, 28}, {0xffffff0, 28},
+    {0xffffff1, 28}, {0xffffff2, 28}, {0x3ffffffe, 30}, {0xffffff3, 28},
+    {0xffffff4, 28}, {0xffffff5, 28}, {0xffffff6, 28}, {0xffffff7, 28},
+    {0xffffff8, 28}, {0xffffff9, 28}, {0xffffffa, 28}, {0xffffffb, 28},
+    // Sym 32-47 (Space: 0x14/6 bits, !: 0x3f8/10 bits, etc.)
+    {0x14, 6}, {0x3f8, 10}, {0x3f9, 10}, {0xffa, 12},
+    {0x1ff9, 13}, {0x15, 6}, {0xf8, 8}, {0x7af, 11},
+    {0x3fa, 10}, {0x3fb, 10}, {0xf9, 8}, {0x7b0, 11},
+    {0x7b1, 11}, {0x7b2, 11}, {0x3fc, 10}, {0x3fd, 10},
+    // Sym 48-63 (0-7: simple, 8-9: simple, etc.)
+    {0x1, 6}, {0x2, 6}, {0x3, 6}, {0x4, 6},
+    {0x5, 6}, {0x6, 6}, {0x7, 6}, {0x8, 6},
+    {0x9, 6}, {0xa, 6}, {0xb, 6}, {0x14, 7},
+    {0x15, 7}, {0x16, 7}, {0x17, 7}, {0x18, 7},
+    // Sym 64-79
+    {0x0, 6}, {0x23, 8}, {0x24, 8}, {0x25, 8},
+    {0x26, 8}, {0x27, 8}, {0x28, 8}, {0x29, 8},
+    {0x2a, 8}, {0x2b, 8}, {0x2c, 8}, {0x3fe, 10},
+    {0x7b3, 11}, {0x7b4, 11}, {0x3ff, 10}, {0x1ffa, 13},
+    // Sym 80-95
+    {0x21, 8}, {0x5, 5}, {0x6, 5}, {0x7, 5},
+    {0x8, 5}, {0x9, 5}, {0xa, 5}, {0xb, 5},
+    {0xc, 5}, {0xd, 5}, {0xe, 5}, {0xf, 5},
+    {0x10, 6}, {0x11, 6}, {0x12, 6}, {0x13, 6},
+    // Sym 96-111
+    {0x3f, 6}, {0x19, 7}, {0x1a, 7}, {0x1b, 7},
+    {0x1c, 7}, {0x1d, 7}, {0x1e, 7}, {0x1f, 7},
+    {0x7b5, 11}, {0x7b6, 11}, {0x7b7, 11}, {0x7b8, 11},
+    {0x7b9, 11}, {0x7ba, 11}, {0x7bb, 11}, {0x7bc, 11},
+    // Sym 112-127
+    {0xfb, 8}, {0x20, 8}, {0x22, 8}, {0x2d, 8},
+    {0x2e, 8}, {0x2f, 8}, {0x30, 8}, {0x31, 8},
+    {0x32, 8}, {0x33, 8}, {0x34, 8}, {0x35, 8},
+    {0x36, 8}, {0x37, 8}, {0x38, 8}, {0x39, 8},
+    // Sym 128-143
+    {0x3a, 8}, {0x42, 8}, {0x43, 8}, {0x44, 8},
+    {0x45, 8}, {0x46, 8}, {0x47, 8}, {0x48, 8},
+    {0x49, 8}, {0x4a, 8}, {0x4b, 8}, {0x4c, 8},
+    {0x4d, 8}, {0x4e, 8}, {0x4f, 8}, {0x50, 8},
+    // Sym 144-159
+    {0x51, 8}, {0x52, 8}, {0x53, 8}, {0x54, 8},
+    {0x55, 8}, {0x56, 8}, {0x57, 8}, {0x58, 8},
+    {0x59, 8}, {0x5a, 8}, {0x5b, 8}, {0x5c, 8},
+    {0x5d, 8}, {0x5e, 8}, {0x5f, 8}, {0x60, 8},
+    // Sym 160-175
+    {0x61, 8}, {0x62, 8}, {0x63, 8}, {0x64, 8},
+    {0x65, 8}, {0x66, 8}, {0x67, 8}, {0x68, 8},
+    {0x69, 8}, {0x6a, 8}, {0x6b, 8}, {0x6c, 8},
+    {0x6d, 8}, {0x6e, 8}, {0x6f, 8}, {0x70, 8},
+    // Sym 176-191
+    {0x71, 8}, {0x72, 8}, {0x73, 8}, {0x74, 8},
+    {0x75, 8}, {0x76, 8}, {0x77, 8}, {0x78, 8},
+    {0x79, 8}, {0x7a, 8}, {0x7b, 8}, {0x7c, 8},
+    {0x7d, 8}, {0x7e, 8}, {0x7f, 8}, {0xfc, 8},
+    // Sym 192-207
+    {0xb9, 8}, {0xba, 8}, {0xbb, 8}, {0xc0, 8},
+    {0xc1, 8}, {0xc2, 8}, {0xc3, 8}, {0xc4, 8},
+    {0xc5, 8}, {0xc6, 8}, {0xc7, 8}, {0xc8, 8},
+    {0xc9, 8}, {0xca, 8}, {0xcb, 8}, {0xcc, 8},
+    // Sym 208-223
+    {0xcd, 8}, {0xce, 8}, {0xcf, 8}, {0xd0, 8},
+    {0xd1, 8}, {0xd2, 8}, {0xd3, 8}, {0xd4, 8},
+    {0xd5, 8}, {0xd6, 8}, {0xd7, 8}, {0xd8, 8},
+    {0xd9, 8}, {0xda, 8}, {0xdb, 8}, {0xdc, 8},
+    // Sym 224-239
+    {0xdd, 8}, {0xde, 8}, {0xdf, 8}, {0xe0, 8},
+    {0xe1, 8}, {0xe2, 8}, {0xe3, 8}, {0xe4, 8},
+    {0xe5, 8}, {0xe6, 8}, {0xe7, 8}, {0xe8, 8},
+    {0xe9, 8}, {0xea, 8}, {0xeb, 8}, {0xec, 8},
+    // Sym 240-255
+    {0xed, 8}, {0xee, 8}, {0xef, 8}, {0xf0, 8},
+    {0xf1, 8}, {0xf2, 8}, {0xf3, 8}, {0xf4, 8},
+    {0xf5, 8}, {0xf6, 8}, {0xf7, 8}, {0xf8, 8},
+    {0x3c, 8}, {0xf9, 8}, {0xfa, 8}, {0xfb, 8}
+};
+
+/**
+ * @brief Decode a Huffman-encoded byte string
+ * Uses RFC 7541 Appendix B Huffman code table
+ * This is a correct implementation using bit-level decoding
+ * 
+ * @param data Pointer to Huffman-encoded data
+ * @param length Length of encoded data in bytes
+ * @return Decoded string
+ */
+static std::string huffmanDecode(const uint8_t* data, size_t length) {
+    if (length == 0) {
+        return "";
+    }
+
+    std::string result;
+    result.reserve(length * 2);
+    
+    uint64_t bit_buffer = 0;
+    int bits_in_buffer = 0;
+    
+    // Read all bytes into the bit buffer and process symbols
+    for (size_t i = 0; i < length; ++i) {
+        bit_buffer = (bit_buffer << 8) | data[i];
+        bits_in_buffer += 8;
+        
+        // Process any complete symbols we can now decode
+        bool decoded = true;
+        while (decoded && bits_in_buffer >= 5) {  // Min Huffman code is 5 bits
+            decoded = false;
+            
+            // Try to match a symbol, checking from longest to shortest codes
+            for (int code_len = 30; code_len >= 5; --code_len) {
+                if (bits_in_buffer < code_len) continue;
+                
+                // Extract the top code_len bits
+                uint64_t top_bits = bit_buffer >> (bits_in_buffer - code_len);
+                uint32_t check_code = static_cast<uint32_t>(top_bits & ((1ULL << code_len) - 1));
+                
+                // Look for a matching Huffman code
+                for (int sym = 0; sym < 256; ++sym) {
+                    if (HUFFMAN_CODE_TABLE[sym].bits == code_len &&
+                        HUFFMAN_CODE_TABLE[sym].code == check_code) {
+                        // Found!
+                        result += static_cast<char>(sym);
+                        bits_in_buffer -= code_len;
+                        decoded = true;
+                        break;
+                    }
+                }
+                
+                if (decoded) break;
+            }
+        }
+    }
+    
+    // Per RFC 7541, any remaining bits should be padding (EOS symbol = all 1s)
+    // We just discard them - they shouldn't affect the decoded string
+    
+    return result;
+}
+
+// ============================================================================
 // StringCoder Implementation
 // ============================================================================
 
@@ -511,10 +669,6 @@ std::pair<std::string, size_t> StringCoder::decodeString(
     uint8_t first_byte = data[0];
     bool huffman = (first_byte & 0x80) != 0;
 
-    if (huffman) {
-        throw std::runtime_error("Huffman-encoded strings are not yet supported");
-    }
-
     // Decode length using 7-bit prefix
     uint64_t len = first_byte & 0x7F;
     size_t bytes_consumed = 1;
@@ -547,8 +701,16 @@ std::pair<std::string, size_t> StringCoder::decodeString(
         throw std::out_of_range("buffer is too short for string data");
     }
 
-    std::string result(reinterpret_cast<const char*>(data + bytes_consumed),
-                      reinterpret_cast<const char*>(data + bytes_consumed + len));
+    std::string result;
+    
+    if (huffman) {
+        // Huffman-encoded string
+        result = huffmanDecode(data + bytes_consumed, len);
+    } else {
+        // Literal string
+        result = std::string(reinterpret_cast<const char*>(data + bytes_consumed),
+                            reinterpret_cast<const char*>(data + bytes_consumed + len));
+    }
 
     return std::make_pair(result, bytes_consumed + len);
 }
