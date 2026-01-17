@@ -1,6 +1,7 @@
 #include "http2_client.h"
 #include "hpack.h"
 #include <iostream>
+#include <iomanip>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -409,22 +410,37 @@ Http2Client::Response Http2Client::receiveResponse(uint32_t stream_id) {
             
             case FRAME_TYPE_HEADERS: {
                 if (recv_stream_id == stream_id) {
-                    std::cout << "Received HEADERS frame for stream " << stream_id << std::endl;
-                    std::cout << "  Payload size: " << payload.size() << " bytes" << std::endl;
-                    std::cout << "  Payload hex: ";
-                    for (size_t i = 0; i < std::min(size_t(50), payload.size()); ++i) {
-                        printf("%02x ", payload[i]);
-                    }
-                    std::cout << (payload.size() > 50 ? "..." : "") << std::endl;
+                    std::cout << "\n=== Received HEADERS Frame ===" << std::endl;
+                    std::cout << "Stream ID: " << stream_id << std::endl;
+                    std::cout << "Payload size: " << payload.size() << " bytes" << std::endl;
                     
                     header_block.insert(header_block.end(), payload.begin(), payload.end());
+                    
                     if (flags & FLAG_END_HEADERS) {
-                        std::cout << "Headers complete (END_HEADERS flag set), attempting to decode..." << std::endl;
-                        std::cout << "  Total header block size: " << header_block.size() << " bytes" << std::endl;
+                        std::cout << "\n=== Header Block Complete (END_HEADERS flag set) ===" << std::endl;
+                        std::cout << "Total header block size: " << header_block.size() << " bytes\n" << std::endl;
+                        
+                        // Show hex dump of the header block
+                        std::cout << "Header block hex dump:" << std::endl;
+                        for (size_t i = 0; i < header_block.size(); ++i) {
+                            if (i % 16 == 0) {
+                                std::cout << "  " << std::hex << std::setfill('0') << std::setw(4) << i << ": ";
+                            }
+                            std::cout << std::hex << std::setfill('0') << std::setw(2) << (int)header_block[i] << " ";
+                            if (i % 16 == 15) {
+                                std::cout << std::endl;
+                            }
+                        }
+                        if (header_block.size() % 16 != 0) {
+                            std::cout << std::endl;
+                        }
+                        std::cout << std::dec << std::endl;
+                        
                         // 尝试解码头部
+                        std::cout << "=== Decoding Headers ===" << std::endl;
                         try {
                             auto decoded = HPACK::decode(header_block);
-                            std::cout << "Successfully decoded " << decoded.size() << " headers:" << std::endl;
+                            std::cout << "\nSuccessfully decoded " << decoded.size() << " headers:" << std::endl;
                             for (const auto& [name, value] : decoded) {
                                 if (name == ":status") {
                                     try {
@@ -432,27 +448,19 @@ Http2Client::Response Http2Client::receiveResponse(uint32_t stream_id) {
                                     } catch (...) {
                                         response.status_code = 200;
                                     }
-                                    std::cout << "  Status: " << value << std::endl;
+                                    std::cout << "  " << name << ": " << value << " (HTTP Status)" << std::endl;
                                 } else {
                                     response.headers.push_back({name, value});
                                     std::cout << "  " << name << ": " << value << std::endl;
                                 }
                             }
                         } catch (const std::exception& e) {
-                            std::cerr << "Error decoding headers: " << e.what() << std::endl;
-                            std::cerr << "Header block details:" << std::endl;
-                            std::cerr << "  Size: " << header_block.size() << " bytes" << std::endl;
-                            std::cerr << "  Hex: ";
-                            for (size_t i = 0; i < header_block.size(); ++i) {
-                                fprintf(stderr, "%02x ", header_block[i]);
-                            }
-                            std::cerr << std::endl;
-                            // 继续处理，尽管headers无法解码
-                            std::cout << "Continuing without decoded headers..." << std::endl;
+                            std::cerr << "\n✗ Error decoding headers: " << e.what() << std::endl;
+                            std::cerr << "Continuing without decoded headers..." << std::endl;
                         }
                     }
                     if (flags & FLAG_END_STREAM) {
-                        std::cout << "Response ended with headers" << std::endl;
+                        std::cout << "\nResponse stream ended" << std::endl;
                         return response;
                     }
                 }

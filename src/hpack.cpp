@@ -558,9 +558,8 @@ static const HuffmanCode HUFFMAN_CODE_TABLE[256] = {
 };
 
 /**
- * @brief Decode a Huffman-encoded byte string
- * Uses RFC 7541 Appendix B Huffman code table
- * This is a correct implementation using bit-level decoding
+ * @brief Decode a Huffman-encoded byte string using RFC 7541 Appendix B
+ * Uses a more efficient decoding algorithm
  * 
  * @param data Pointer to Huffman-encoded data
  * @param length Length of encoded data in bytes
@@ -574,46 +573,70 @@ static std::string huffmanDecode(const uint8_t* data, size_t length) {
     std::string result;
     result.reserve(length * 2);
     
+    // Build a reverse lookup map for faster decoding
+    // Map from (code, bits) -> symbol
+    std::map<std::pair<uint32_t, uint8_t>, uint8_t> huffman_map;
+    for (int sym = 0; sym < 256; ++sym) {
+        huffman_map[{HUFFMAN_CODE_TABLE[sym].code, HUFFMAN_CODE_TABLE[sym].bits}] = sym;
+    }
+    
     uint64_t bit_buffer = 0;
     int bits_in_buffer = 0;
     
-    // Read all bytes into the bit buffer and process symbols
-    for (size_t i = 0; i < length; ++i) {
-        bit_buffer = (bit_buffer << 8) | data[i];
+    // Process all bytes
+    for (size_t byte_idx = 0; byte_idx < length; ++byte_idx) {
+        bit_buffer = (bit_buffer << 8) | data[byte_idx];
         bits_in_buffer += 8;
         
-        // Process any complete symbols we can now decode
-        bool decoded = true;
-        while (decoded && bits_in_buffer >= 5) {  // Min Huffman code is 5 bits
-            decoded = false;
+        // Try to decode symbols from the buffer
+        while (bits_in_buffer >= 5) {  // Minimum Huffman code is 5 bits
+            bool found = false;
             
-            // Try to match a symbol, checking from longest to shortest codes
+            // Try code lengths from longest to shortest (30 down to 5)
             for (int code_len = 30; code_len >= 5; --code_len) {
                 if (bits_in_buffer < code_len) continue;
                 
                 // Extract the top code_len bits
                 uint64_t top_bits = bit_buffer >> (bits_in_buffer - code_len);
-                uint32_t check_code = static_cast<uint32_t>(top_bits & ((1ULL << code_len) - 1));
+                uint32_t code = static_cast<uint32_t>(top_bits & ((1ULL << code_len) - 1));
                 
-                // Look for a matching Huffman code
-                for (int sym = 0; sym < 256; ++sym) {
-                    if (HUFFMAN_CODE_TABLE[sym].bits == code_len &&
-                        HUFFMAN_CODE_TABLE[sym].code == check_code) {
-                        // Found!
-                        result += static_cast<char>(sym);
-                        bits_in_buffer -= code_len;
-                        decoded = true;
-                        break;
-                    }
+                // Look up in the map
+                auto key = std::make_pair(code, code_len);
+                if (huffman_map.find(key) != huffman_map.end()) {
+                    result += static_cast<char>(huffman_map[key]);
+                    bits_in_buffer -= code_len;
+                    found = true;
+                    break;
                 }
-                
-                if (decoded) break;
+            }
+            
+            if (!found) {
+                // No valid code found, might be padding
+                // Remaining bits should all be 1s (EOS symbol padding)
+                uint64_t remaining_mask = (1ULL << bits_in_buffer) - 1;
+                uint64_t remaining = bit_buffer & remaining_mask;
+                if (remaining == remaining_mask) {
+                    // Valid padding (all 1s), done
+                    bits_in_buffer = 0;
+                } else {
+                    // Invalid data, but continue anyway
+                    std::cerr << "Warning: Huffman decoding found invalid padding bits" << std::endl;
+                    bits_in_buffer = 0;
+                }
+                break;
             }
         }
     }
     
-    // Per RFC 7541, any remaining bits should be padding (EOS symbol = all 1s)
-    // We just discard them - they shouldn't affect the decoded string
+    // Check for incomplete Huffman code at the end
+    if (bits_in_buffer > 0) {
+        // Remaining bits should be padding (all 1s)
+        uint64_t remaining_mask = (1ULL << bits_in_buffer) - 1;
+        uint64_t remaining = bit_buffer & remaining_mask;
+        if (remaining != remaining_mask && bits_in_buffer < 8) {
+            std::cerr << "Warning: Huffman decoding ended with incomplete code or invalid padding" << std::endl;
+        }
+    }
     
     return result;
 }
