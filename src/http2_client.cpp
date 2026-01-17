@@ -297,19 +297,42 @@ bool Http2Client::sendHeadersFrame(uint32_t stream_id, const std::string& method
     std::cout << "  :scheme: https (static index 7)" << std::endl;
     encoded_headers.push_back(0x87);  // 10000111 = indexed header field, index 7
     
+    // Helper lambda to encode a string according to RFC 7541
+    auto encodeString = [](const std::string& str) -> std::vector<uint8_t> {
+        std::vector<uint8_t> encoded;
+        uint64_t length = str.length();
+        
+        // H flag = 0 (not Huffman encoded), then encode length with 7-bit prefix
+        if (length < 127) {
+            encoded.push_back(static_cast<uint8_t>(length));
+        } else {
+            encoded.push_back(127);  // 7 bits all set to 1
+            length -= 127;
+            
+            while (length >= 128) {
+                encoded.push_back(static_cast<uint8_t>((length & 0x7F) | 0x80));
+                length >>= 7;
+            }
+            encoded.push_back(static_cast<uint8_t>(length & 0x7F));
+        }
+        
+        // Append string data
+        encoded.insert(encoded.end(), str.begin(), str.end());
+        return encoded;
+    };
+    
     // :authority = static table index 1, literal value
     std::cout << "  :authority: " << host_ << std::endl;
     encoded_headers.push_back(0x41);  // 01000001 = literal with incremental indexing, index 1
-    // Encode authority value as string (without huffman)
-    encoded_headers.push_back(host_.length());
-    encoded_headers.insert(encoded_headers.end(), host_.begin(), host_.end());
+    auto authority_encoded = encodeString(host_);
+    encoded_headers.insert(encoded_headers.end(), authority_encoded.begin(), authority_encoded.end());
     
     // :path = static table index 4, literal value
     std::cout << "  :path: " << path << std::endl;
     std::string full_path = path.empty() ? "/" : path;
     encoded_headers.push_back(0x44);  // 01000100 = literal with incremental indexing, index 4
-    encoded_headers.push_back(full_path.length());
-    encoded_headers.insert(encoded_headers.end(), full_path.begin(), full_path.end());
+    auto path_encoded = encodeString(full_path);
+    encoded_headers.insert(encoded_headers.end(), path_encoded.begin(), path_encoded.end());
     
     // Add custom headers if any
     for (const auto& [name, value] : headers) {
@@ -317,11 +340,11 @@ bool Http2Client::sendHeadersFrame(uint32_t stream_id, const std::string& method
         // Use literal without indexing (0000xxxx)
         encoded_headers.push_back(0x00);  // Literal without indexing
         // Encode name as string
-        encoded_headers.push_back(name.length());
-        encoded_headers.insert(encoded_headers.end(), name.begin(), name.end());
+        auto name_encoded = encodeString(name);
+        encoded_headers.insert(encoded_headers.end(), name_encoded.begin(), name_encoded.end());
         // Encode value as string
-        encoded_headers.push_back(value.length());
-        encoded_headers.insert(encoded_headers.end(), value.begin(), value.end());
+        auto value_encoded = encodeString(value);
+        encoded_headers.insert(encoded_headers.end(), value_encoded.begin(), value_encoded.end());
     }
     
     std::cout << "Encoded headers size: " << encoded_headers.size() << " bytes" << std::endl;

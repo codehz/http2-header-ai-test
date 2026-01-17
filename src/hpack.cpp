@@ -4,6 +4,7 @@
 #include <cctype>
 #include <deque>
 #include <map>
+#include <iostream>
 
 namespace http2 {
 
@@ -678,18 +679,20 @@ std::pair<std::string, size_t> StringCoder::decodeString(
         uint64_t continuation = 0;
         int shift = 0;
         const int MAX_ITERATIONS = 10;
+        uint8_t last_byte = 0;
 
         for (int i = 0; i < MAX_ITERATIONS && bytes_consumed < length; ++i) {
-            uint8_t byte = data[bytes_consumed++];
-            continuation += static_cast<uint64_t>(byte & 0x7F) << shift;
+            last_byte = data[bytes_consumed++];
+            continuation += static_cast<uint64_t>(last_byte & 0x7F) << shift;
             shift += 7;
 
-            if ((byte & 0x80) == 0) {
+            if ((last_byte & 0x80) == 0) {
                 break;
             }
         }
 
-        if (bytes_consumed < length && (data[bytes_consumed - 1] & 0x80) != 0) {
+        // Check for incomplete encoding
+        if (bytes_consumed <= length && (last_byte & 0x80) != 0) {
             throw std::out_of_range("buffer is too short for string length");
         }
 
@@ -698,6 +701,8 @@ std::pair<std::string, size_t> StringCoder::decodeString(
 
     // Extract string data
     if (bytes_consumed + len > length) {
+        std::cerr << "String data overflow: bytes_consumed=" << bytes_consumed 
+                  << " string_length=" << len << " buffer_length=" << length << std::endl;
         throw std::out_of_range("buffer is too short for string data");
     }
 
@@ -705,7 +710,12 @@ std::pair<std::string, size_t> StringCoder::decodeString(
     
     if (huffman) {
         // Huffman-encoded string
-        result = huffmanDecode(data + bytes_consumed, len);
+        try {
+            result = huffmanDecode(data + bytes_consumed, len);
+        } catch (const std::exception& e) {
+            std::cerr << "Huffman decoding failed: " << e.what() << std::endl;
+            throw;
+        }
     } else {
         // Literal string
         result = std::string(reinterpret_cast<const char*>(data + bytes_consumed),
@@ -745,19 +755,33 @@ std::vector<std::pair<std::string, std::string>> HPACK::decode(
 
     size_t pos = 0;
     while (pos < buffer.size()) {
-        // Decode name
-        auto [name, name_len] = StringCoder::decodeString(buffer.data() + pos, buffer.size() - pos);
-        pos += name_len;
+        try {
+            // Decode name
+            auto [name, name_len] = StringCoder::decodeString(buffer.data() + pos, buffer.size() - pos);
+            pos += name_len;
 
-        if (pos >= buffer.size()) {
-            break;
+            if (pos >= buffer.size()) {
+                std::cerr << "Warning: Incomplete header pair - missing value" << std::endl;
+                break;
+            }
+
+            // Decode value
+            auto [value, value_len] = StringCoder::decodeString(buffer.data() + pos, buffer.size() - pos);
+            pos += value_len;
+
+            headers.emplace_back(name, value);
+        } catch (const std::exception& e) {
+            std::cerr << "Error decoding header at position " << pos << ": " << e.what() << std::endl;
+            // Continue trying to decode remaining headers
+            // Attempt to skip forward and find next valid header
+            if (pos < buffer.size()) {
+                // Skip one byte and try again
+                pos++;
+                continue;
+            } else {
+                break;
+            }
         }
-
-        // Decode value
-        auto [value, value_len] = StringCoder::decodeString(buffer.data() + pos, buffer.size() - pos);
-        pos += value_len;
-
-        headers.emplace_back(name, value);
     }
 
     return headers;
