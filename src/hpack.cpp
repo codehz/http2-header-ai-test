@@ -474,93 +474,78 @@ struct HuffmanCode {
     uint8_t bits;     // Number of bits (1-30)
 };
 
+// Huffman codes from RFC 7541 Appendix B (extracted from nghttp2)
 static const HuffmanCode HUFFMAN_CODE_TABLE[256] = {
-    // Sym 0-15
-    {0x1ff8, 13}, {0x7fffd8, 23}, {0xfffffe2, 28}, {0xfffffe3, 28},
-    {0xfffffe4, 28}, {0xfffffe5, 28}, {0xfffffe6, 28}, {0xfffffe7, 28},
-    {0xfffffe8, 28}, {0xffffea, 24}, {0x3ffffffc, 30}, {0xfffffe9, 28},
-    {0xfffffea, 28}, {0x3ffffffd, 30}, {0xfffffeb, 28}, {0xfffffec, 28},
-    // Sym 16-31
-    {0xfffffed, 28}, {0xfffffee, 28}, {0xfffffef, 28}, {0xffffff0, 28},
-    {0xffffff1, 28}, {0xffffff2, 28}, {0x3ffffffe, 30}, {0xffffff3, 28},
-    {0xffffff4, 28}, {0xffffff5, 28}, {0xffffff6, 28}, {0xffffff7, 28},
-    {0xffffff8, 28}, {0xffffff9, 28}, {0xffffffa, 28}, {0xffffffb, 28},
-    // Sym 32-47 (Space: 0x14/6 bits, !: 0x3f8/10 bits, etc.)
-    {0x14, 6}, {0x3f8, 10}, {0x3f9, 10}, {0xffa, 12},
-    {0x1ff9, 13}, {0x15, 6}, {0xf8, 8}, {0x7af, 11},
-    {0x3fa, 10}, {0x3fb, 10}, {0xf9, 8}, {0x7b0, 11},
-    {0x7b1, 11}, {0x7b2, 11}, {0x3fc, 10}, {0x3fd, 10},
-    // Sym 48-63 (0-7: simple, 8-9: simple, etc.)
-    {0x1, 6}, {0x2, 6}, {0x3, 6}, {0x4, 6},
-    {0x5, 6}, {0x6, 6}, {0x7, 6}, {0x8, 6},
-    {0x9, 6}, {0xa, 6}, {0xb, 6}, {0x14, 7},
-    {0x15, 7}, {0x16, 7}, {0x17, 7}, {0x18, 7},
-    // Sym 64-79
-    {0x0, 6}, {0x23, 8}, {0x24, 8}, {0x25, 8},
-    {0x26, 8}, {0x27, 8}, {0x28, 8}, {0x29, 8},
-    {0x2a, 8}, {0x2b, 8}, {0x2c, 8}, {0x3fe, 10},
-    {0x7b3, 11}, {0x7b4, 11}, {0x3ff, 10}, {0x1ffa, 13},
-    // Sym 80-95
-    {0x21, 8}, {0x5, 5}, {0x6, 5}, {0x7, 5},
-    {0x8, 5}, {0x9, 5}, {0xa, 5}, {0xb, 5},
-    {0xc, 5}, {0xd, 5}, {0xe, 5}, {0xf, 5},
-    {0x10, 6}, {0x11, 6}, {0x12, 6}, {0x13, 6},
-    // Sym 96-111
-    {0x3f, 6}, {0x19, 7}, {0x1a, 7}, {0x1b, 7},
-    {0x1c, 7}, {0x1d, 7}, {0x1e, 7}, {0x1f, 7},
-    {0x7b5, 11}, {0x7b6, 11}, {0x7b7, 11}, {0x7b8, 11},
-    {0x7b9, 11}, {0x7ba, 11}, {0x7bb, 11}, {0x7bc, 11},
-    // Sym 112-127
-    {0xfb, 8}, {0x20, 8}, {0x22, 8}, {0x2d, 8},
-    {0x2e, 8}, {0x2f, 8}, {0x30, 8}, {0x31, 8},
-    {0x32, 8}, {0x33, 8}, {0x34, 8}, {0x35, 8},
-    {0x36, 8}, {0x37, 8}, {0x38, 8}, {0x39, 8},
-    // Sym 128-143
-    {0x3a, 8}, {0x42, 8}, {0x43, 8}, {0x44, 8},
-    {0x45, 8}, {0x46, 8}, {0x47, 8}, {0x48, 8},
-    {0x49, 8}, {0x4a, 8}, {0x4b, 8}, {0x4c, 8},
-    {0x4d, 8}, {0x4e, 8}, {0x4f, 8}, {0x50, 8},
-    // Sym 144-159
-    {0x51, 8}, {0x52, 8}, {0x53, 8}, {0x54, 8},
-    {0x55, 8}, {0x56, 8}, {0x57, 8}, {0x58, 8},
-    {0x59, 8}, {0x5a, 8}, {0x5b, 8}, {0x5c, 8},
-    {0x5d, 8}, {0x5e, 8}, {0x5f, 8}, {0x60, 8},
-    // Sym 160-175
-    {0x61, 8}, {0x62, 8}, {0x63, 8}, {0x64, 8},
-    {0x65, 8}, {0x66, 8}, {0x67, 8}, {0x68, 8},
-    {0x69, 8}, {0x6a, 8}, {0x6b, 8}, {0x6c, 8},
-    {0x6d, 8}, {0x6e, 8}, {0x6f, 8}, {0x70, 8},
-    // Sym 176-191
-    {0x71, 8}, {0x72, 8}, {0x73, 8}, {0x74, 8},
-    {0x75, 8}, {0x76, 8}, {0x77, 8}, {0x78, 8},
-    {0x79, 8}, {0x7a, 8}, {0x7b, 8}, {0x7c, 8},
-    {0x7d, 8}, {0x7e, 8}, {0x7f, 8}, {0xfc, 8},
-    // Sym 192-207
-    {0xb9, 8}, {0xba, 8}, {0xbb, 8}, {0xc0, 8},
-    {0xc1, 8}, {0xc2, 8}, {0xc3, 8}, {0xc4, 8},
-    {0xc5, 8}, {0xc6, 8}, {0xc7, 8}, {0xc8, 8},
-    {0xc9, 8}, {0xca, 8}, {0xcb, 8}, {0xcc, 8},
-    // Sym 208-223
-    {0xcd, 8}, {0xce, 8}, {0xcf, 8}, {0xd0, 8},
-    {0xd1, 8}, {0xd2, 8}, {0xd3, 8}, {0xd4, 8},
-    {0xd5, 8}, {0xd6, 8}, {0xd7, 8}, {0xd8, 8},
-    {0xd9, 8}, {0xda, 8}, {0xdb, 8}, {0xdc, 8},
-    // Sym 224-239
-    {0xdd, 8}, {0xde, 8}, {0xdf, 8}, {0xe0, 8},
-    {0xe1, 8}, {0xe2, 8}, {0xe3, 8}, {0xe4, 8},
-    {0xe5, 8}, {0xe6, 8}, {0xe7, 8}, {0xe8, 8},
-    {0xe9, 8}, {0xea, 8}, {0xeb, 8}, {0xec, 8},
-    // Sym 240-255
-    {0xed, 8}, {0xee, 8}, {0xef, 8}, {0xf0, 8},
-    {0xf1, 8}, {0xf2, 8}, {0xf3, 8}, {0xf4, 8},
-    {0xf5, 8}, {0xf6, 8}, {0xf7, 8}, {0xf8, 8},
-    {0x3c, 8}, {0xf9, 8}, {0xfa, 8}, {0xfb, 8}
+    {0x1ff8, 13}, {0x7fffd8, 23}, {0xfffffe2, 28}, {0xfffffe3, 28},  // Sym 0-3
+    {0xfffffe4, 28}, {0xfffffe5, 28}, {0xfffffe6, 28}, {0xfffffe7, 28},  // Sym 4-7
+    {0xfffffe8, 28}, {0xffffea, 24}, {0x3ffffffc, 30}, {0xfffffe9, 28},  // Sym 8-11
+    {0xfffffea, 28}, {0x3ffffffd, 30}, {0xfffffeb, 28}, {0xfffffec, 28},  // Sym 12-15
+    {0xfffffed, 28}, {0xfffffee, 28}, {0xfffffef, 28}, {0xffffff0, 28},  // Sym 16-19
+    {0xffffff1, 28}, {0xffffff2, 28}, {0x3ffffffe, 30}, {0xffffff3, 28},  // Sym 20-23
+    {0xffffff4, 28}, {0xffffff5, 28}, {0xffffff6, 28}, {0xffffff7, 28},  // Sym 24-27
+    {0xffffff8, 28}, {0xffffff9, 28}, {0xffffffa, 28}, {0xffffffb, 28},  // Sym 28-31
+    {0x14, 6}, {0x3f8, 10}, {0x3f9, 10}, {0xffa, 12},  // Sym 32-35
+    {0x1ff9, 13}, {0x15, 6}, {0xf8, 8}, {0x7fa, 11},  // Sym 36-39
+    {0x3fa, 10}, {0x3fb, 10}, {0xf9, 8}, {0x7fb, 11},  // Sym 40-43
+    {0xfa, 8}, {0x16, 6}, {0x17, 6}, {0x18, 6},  // Sym 44-47
+    {0x0, 5}, {0x1, 5}, {0x2, 5}, {0x19, 6},  // Sym 48-51
+    {0x1a, 6}, {0x1b, 6}, {0x1c, 6}, {0x1d, 6},  // Sym 52-55
+    {0x1e, 6}, {0x1f, 6}, {0x5c, 7}, {0xfb, 8},  // Sym 56-59
+    {0x7ffc, 15}, {0x20, 6}, {0xffb, 12}, {0x3fc, 10},  // Sym 60-63
+    {0x1ffa, 13}, {0x21, 6}, {0x5d, 7}, {0x5e, 7},  // Sym 64-67
+    {0x5f, 7}, {0x60, 7}, {0x61, 7}, {0x62, 7},  // Sym 68-71
+    {0x63, 7}, {0x64, 7}, {0x65, 7}, {0x66, 7},  // Sym 72-75
+    {0x67, 7}, {0x68, 7}, {0x69, 7}, {0x6a, 7},  // Sym 76-79
+    {0x6b, 7}, {0x6c, 7}, {0x6d, 7}, {0x6e, 7},  // Sym 80-83
+    {0x6f, 7}, {0x70, 7}, {0x71, 7}, {0x72, 7},  // Sym 84-87
+    {0xfc, 8}, {0x73, 7}, {0xfd, 8}, {0x1ffb, 13},  // Sym 88-91
+    {0x7fff0, 19}, {0x1ffc, 13}, {0x3ffc, 14}, {0x22, 6},  // Sym 92-95
+    {0x7ffd, 15}, {0x3, 5}, {0x23, 6}, {0x4, 5},  // Sym 96-99
+    {0x24, 6}, {0x5, 5}, {0x25, 6}, {0x26, 6},  // Sym 100-103
+    {0x27, 6}, {0x6, 5}, {0x74, 7}, {0x75, 7},  // Sym 104-107
+    {0x28, 6}, {0x29, 6}, {0x2a, 6}, {0x7, 5},  // Sym 108-111
+    {0x2b, 6}, {0x76, 7}, {0x2c, 6}, {0x8, 5},  // Sym 112-115
+    {0x9, 5}, {0x2d, 6}, {0x77, 7}, {0x78, 7},  // Sym 116-119
+    {0x79, 7}, {0x7a, 7}, {0x7b, 7}, {0x7ffe, 15},  // Sym 120-123
+    {0x7fc, 11}, {0x3ffd, 14}, {0x1ffd, 13}, {0xffffffc, 28},  // Sym 124-127
+    {0xfffe6, 20}, {0x3fffd2, 22}, {0xfffe7, 20}, {0xfffe8, 20},  // Sym 128-131
+    {0x3fffd3, 22}, {0x3fffd4, 22}, {0x3fffd5, 22}, {0x7fffd9, 23},  // Sym 132-135
+    {0x3fffd6, 22}, {0x7fffda, 23}, {0x7fffdb, 23}, {0x7fffdc, 23},  // Sym 136-139
+    {0x7fffdd, 23}, {0x7fffde, 23}, {0xffffeb, 24}, {0x7fffdf, 23},  // Sym 140-143
+    {0xffffec, 24}, {0xffffed, 24}, {0x3fffd7, 22}, {0x7fffe0, 23},  // Sym 144-147
+    {0xffffee, 24}, {0x7fffe1, 23}, {0x7fffe2, 23}, {0x7fffe3, 23},  // Sym 148-151
+    {0x7fffe4, 23}, {0x1fffdc, 21}, {0x3fffd8, 22}, {0x7fffe5, 23},  // Sym 152-155
+    {0x3fffd9, 22}, {0x7fffe6, 23}, {0x7fffe7, 23}, {0xffffef, 24},  // Sym 156-159
+    {0x3fffda, 22}, {0x1fffdd, 21}, {0xfffe9, 20}, {0x3fffdb, 22},  // Sym 160-163
+    {0x3fffdc, 22}, {0x7fffe8, 23}, {0x7fffe9, 23}, {0x1fffde, 21},  // Sym 164-167
+    {0x7fffea, 23}, {0x3fffdd, 22}, {0x3fffde, 22}, {0xfffff0, 24},  // Sym 168-171
+    {0x1fffdf, 21}, {0x3fffdf, 22}, {0x7fffeb, 23}, {0x7fffec, 23},  // Sym 172-175
+    {0x1fffe0, 21}, {0x1fffe1, 21}, {0x3fffe0, 22}, {0x1fffe2, 21},  // Sym 176-179
+    {0x7fffed, 23}, {0x3fffe1, 22}, {0x7fffee, 23}, {0x7fffef, 23},  // Sym 180-183
+    {0xfffea, 20}, {0x3fffe2, 22}, {0x3fffe3, 22}, {0x3fffe4, 22},  // Sym 184-187
+    {0x7ffff0, 23}, {0x3fffe5, 22}, {0x3fffe6, 22}, {0x7ffff1, 23},  // Sym 188-191
+    {0x3ffffe0, 26}, {0x3ffffe1, 26}, {0xfffeb, 20}, {0x7fff1, 19},  // Sym 192-195
+    {0x3fffe7, 22}, {0x7ffff2, 23}, {0x3fffe8, 22}, {0x1ffffec, 25},  // Sym 196-199
+    {0x3ffffe2, 26}, {0x3ffffe3, 26}, {0x3ffffe4, 26}, {0x7ffffde, 27},  // Sym 200-203
+    {0x7ffffdf, 27}, {0x3ffffe5, 26}, {0xfffff1, 24}, {0x1ffffed, 25},  // Sym 204-207
+    {0x7fff2, 19}, {0x1fffe3, 21}, {0x3ffffe6, 26}, {0x7ffffe0, 27},  // Sym 208-211
+    {0x7ffffe1, 27}, {0x3ffffe7, 26}, {0x7ffffe2, 27}, {0xfffff2, 24},  // Sym 212-215
+    {0x1fffe4, 21}, {0x1fffe5, 21}, {0x3ffffe8, 26}, {0x3ffffe9, 26},  // Sym 216-219
+    {0xffffffd, 28}, {0x7ffffe3, 27}, {0x7ffffe4, 27}, {0x7ffffe5, 27},  // Sym 220-223
+    {0xfffec, 20}, {0xfffff3, 24}, {0xfffed, 20}, {0x1fffe6, 21},  // Sym 224-227
+    {0x3fffe9, 22}, {0x1fffe7, 21}, {0x1fffe8, 21}, {0x7ffff3, 23},  // Sym 228-231
+    {0x3fffea, 22}, {0x3fffeb, 22}, {0x1ffffee, 25}, {0x1ffffef, 25},  // Sym 232-235
+    {0xfffff4, 24}, {0xfffff5, 24}, {0x3ffffea, 26}, {0x7ffff4, 23},  // Sym 236-239
+    {0x3ffffeb, 26}, {0x7ffffe6, 27}, {0x3ffffec, 26}, {0x3ffffed, 26},  // Sym 240-243
+    {0x7ffffe7, 27}, {0x7ffffe8, 27}, {0x7ffffe9, 27}, {0x7ffffea, 27},  // Sym 244-247
+    {0x7ffffeb, 27}, {0xffffffe, 28}, {0x7ffffec, 27}, {0x7ffffed, 27},  // Sym 248-251
+    {0x7ffffee, 27}, {0x7ffffef, 27}, {0x7fffff0, 27}, {0x3ffffee, 26}   // Sym 252-255
 };
 
 /**
  * @brief Decode a Huffman-encoded byte string using RFC 7541 Appendix B
- * Uses a more efficient decoding algorithm
- * 
+ * Uses a linear search decoder optimized for correctness
+ *
  * @param data Pointer to Huffman-encoded data
  * @param length Length of encoded data in bytes
  * @return Decoded string
@@ -572,72 +557,55 @@ static std::string huffmanDecode(const uint8_t* data, size_t length) {
 
     std::string result;
     result.reserve(length * 2);
-    
-    // Build a reverse lookup map for faster decoding
-    // Map from (code, bits) -> symbol
-    std::map<std::pair<uint32_t, uint8_t>, uint8_t> huffman_map;
-    for (int sym = 0; sym < 256; ++sym) {
-        huffman_map[{HUFFMAN_CODE_TABLE[sym].code, HUFFMAN_CODE_TABLE[sym].bits}] = sym;
-    }
-    
+
     uint64_t bit_buffer = 0;
     int bits_in_buffer = 0;
-    
-    // Process all bytes
-    for (size_t byte_idx = 0; byte_idx < length; ++byte_idx) {
-        bit_buffer = (bit_buffer << 8) | data[byte_idx];
-        bits_in_buffer += 8;
-        
-        // Try to decode symbols from the buffer
-        while (bits_in_buffer >= 5) {  // Minimum Huffman code is 5 bits
-            bool found = false;
-            
-            // Try code lengths from longest to shortest (30 down to 5)
-            for (int code_len = 30; code_len >= 5; --code_len) {
-                if (bits_in_buffer < code_len) continue;
-                
-                // Extract the top code_len bits
-                uint64_t top_bits = bit_buffer >> (bits_in_buffer - code_len);
-                uint32_t code = static_cast<uint32_t>(top_bits & ((1ULL << code_len) - 1));
-                
-                // Look up in the map
-                auto key = std::make_pair(code, code_len);
-                if (huffman_map.find(key) != huffman_map.end()) {
-                    result += static_cast<char>(huffman_map[key]);
-                    bits_in_buffer -= code_len;
-                    found = true;
-                    break;
-                }
+    size_t byte_idx = 0;
+
+    // Main decode loop - continue while we have data or enough bits to decode
+    while (byte_idx < length || bits_in_buffer >= 5) {
+        // Load more bytes into buffer if needed (up to 30 bits for longest code)
+        while (bits_in_buffer < 30 && byte_idx < length) {
+            bit_buffer = (bit_buffer << 8) | data[byte_idx++];
+            bits_in_buffer += 8;
+        }
+
+        // Try to decode a symbol from the buffer
+        bool found = false;
+
+        // Try all possible symbols
+        for (int sym = 0; sym < 256; ++sym) {
+            uint8_t code_len = HUFFMAN_CODE_TABLE[sym].bits;
+            uint32_t code = HUFFMAN_CODE_TABLE[sym].code;
+
+            // Check if we have enough bits
+            if (bits_in_buffer < code_len) {
+                continue;
             }
-            
-            if (!found) {
-                // No valid code found, might be padding
-                // Remaining bits should all be 1s (EOS symbol padding)
-                uint64_t remaining_mask = (1ULL << bits_in_buffer) - 1;
-                uint64_t remaining = bit_buffer & remaining_mask;
-                if (remaining == remaining_mask) {
-                    // Valid padding (all 1s), done
-                    bits_in_buffer = 0;
-                } else {
-                    // Invalid data, but continue anyway
-                    std::cerr << "Warning: Huffman decoding found invalid padding bits" << std::endl;
-                    bits_in_buffer = 0;
-                }
+
+            // Extract the top code_len bits from buffer
+            uint64_t test_code = bit_buffer >> (bits_in_buffer - code_len);
+            test_code &= ((1ULL << code_len) - 1);
+
+            // Check if it matches
+            if (test_code == code) {
+                result += static_cast<char>(sym);
+                bits_in_buffer -= code_len;
+                // Keep only the remaining bits
+                bit_buffer &= ((1ULL << bits_in_buffer) - 1);
+                found = true;
                 break;
             }
         }
-    }
-    
-    // Check for incomplete Huffman code at the end
-    if (bits_in_buffer > 0) {
-        // Remaining bits should be padding (all 1s)
-        uint64_t remaining_mask = (1ULL << bits_in_buffer) - 1;
-        uint64_t remaining = bit_buffer & remaining_mask;
-        if (remaining != remaining_mask && bits_in_buffer < 8) {
-            std::cerr << "Warning: Huffman decoding ended with incomplete code or invalid padding" << std::endl;
+
+        if (!found) {
+            // No valid code found - remaining bits should be padding (all 1s)
+            // According to RFC 7541, padding consists of the most significant
+            // bits of the EOS symbol (which is all 1s)
+            break;
         }
     }
-    
+
     return result;
 }
 
